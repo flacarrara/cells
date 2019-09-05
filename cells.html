@@ -1,0 +1,555 @@
+<body bgcolor="black" onload="dropsome()">
+<center>
+<canvas id="myCanvas" style="top:0;left:0;position:absolute;float:center;background:#000000;" onmousedown="mousedown(event);" onmouseup="mouseup();">
+</canvas>
+</body>
+
+<script>
+	var canw=window.innerWidth;
+	var canh=window.innerHeight;
+	document.getElementById("myCanvas").width=canw;
+	document.getElementById("myCanvas").height=canh;
+
+	var gravity=getran(0,100); // (9.783)
+	var fluidattract=getran(0,2); // quadratic area (fun to mess with) [1.2]
+	var fluidrepulse=getran(0,2); // quadratic area [1.199]
+	var minrad=getran(0,20);
+	var maxrad=getran(0,canh/10);
+	var killrad=minrad/getran(1,100);
+	var minvtk=getran(0,100);   //vtk: 0-100 (0-1)
+	var maxvtk=getran(0,100);
+	var atrackforce=getran(0,100); //0-100 (0-1)
+	var jizz=getran(0,100); 	// 0-100
+	var spread=getran(0,100);	//0-100
+	var strainlooseness=getran(0,100); //0-100 (0.8-10 inv) 
+	var bouncex=getran(0,2);
+	var bouncey=getran(0,2);
+	maxtension=getran(0,1);
+	strainsres=getran(0,maxrad);// x maxtension, break
+	var elasticatenuator = getran(0,100);
+	chancetoconect=getran(0,100); // one in x
+	var strainsize=getran(0,maxrad*10);
+	
+	var strokewidth=0; // 0.06
+	var drawmodes=["straight", "none", "line", "quad"];
+	var drawstrainmode=drawmodes[parseInt(getran(0,drawmodes.length))];
+	var exchangemass=parseInt(getran(0,2));
+	var maxmass=getran(maxrad,maxrad*10);
+	var massexchangeratio=getran(0,1);
+	var maxdrop=parseInt(getran(10,300));
+	var alphaperframe=getran(0.001,0.5);
+	var drawball=true;
+
+	
+	//	var gravity=9.783; // (9.783)
+	//	var fluidattract=0; // quadratic area (fun to mess with) [1.2]
+	//	var fluidrepulse=0; // quadratic area [1.199]
+	//	var minrad=2;
+	//	var maxrad=5;
+	//	var killrad=0.2;
+	//	var minvtk=0;   //vtk: 0-100 (0-1)
+	//	var maxvtk=100;
+	//	var atrackforce=200; //0-100 (0-1)
+	//	var jizz=50; 	// 0-100
+	//	var spread=0;	//0-100
+	//	var strainlooseness=50; //0-100 (0.8-10 inv) 
+	//	var bouncex=0.76;
+	//	var bouncey=0.0;
+	//	maxtension=0;
+	//	strainsres=5;		// x maxtension, break
+	//	var elasticatenuator = 0;
+	//	chancetoconect=1; // one in x
+	//	var strainsize=0;
+	
+	//	var strokewidth=0; // 0.06
+	//	var drawstrainmode="senoid";  // "straight", "senoid", "none", "line", "quad"
+	//	var exchangemass=false;
+	//	var maxmass=5;
+	//	var massexchangeratio=0.7;
+	//	var maxdrop=200;
+	//	var alphaperframe=0.005;
+	//	var drawball=true;
+	
+	
+	
+	
+	//recalc
+	function convertrangeFrom0100(vrb,min,max){return (((max-min)/100)*vrb)+min;}
+	//recalc
+	gravity/=100;
+	strainlooseness=convertrangeFrom0100(strainlooseness,0.8,10);
+	atrackforce/=100;
+	tvtk=minvtk;
+	minvtk=(100-maxvtk)/100;
+	maxvtk=(100-tvtk)/100;
+	
+	var debug = document.getElementById('debug');
+        var canvas = document.getElementById('myCanvas');
+        var context = canvas.getContext('2d');
+	var rect = canvas.getBoundingClientRect();
+	var images = {};
+		   
+	var drop = [];
+	var isclicked;
+	var imgloaded=false;
+	var aclick=0;
+			
+	var dropnumber = -1;
+	var drhead=-1;
+	var initvy;
+	var initvx;
+	var mx, my;
+
+	
+	
+	canvas.addEventListener('mousemove', function(evt) {
+		var mousePos = getMousePos(canvas, evt);
+	}, false);
+	
+      window.requestAnimFrame = (function(callback) {
+        return window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame ||
+        function(callback) {
+		
+          window.setTimeout(callback, 30/60);
+        };
+      })();
+
+	var framems;
+	var lastframetime;
+
+	
+      function animate() {
+		//getframems();
+		//console.log(framems,maxdrop);
+		//if(framems>100){maxdrop--;};
+
+		//canvas.width = canvas.width;
+		context.beginPath();context.rect(0, 0, canw, canh);context.fillStyle = 'rgba(0,0,0,'+alphaperframe+')';context.fill();
+		
+		if(isclicked){
+			
+			createdrop();
+			
+		}else{dcount=-1;}
+		
+
+		
+		for(di=0;di<=drop.length-1;di++){
+			
+			if(drop[di].act){
+				drop[di].vy+=gravity;
+
+				drop[di].y+=drop[di].vy;
+				drop[di].x+=drop[di].vx;
+			
+				//if(drop[di].vy>0){
+					drop[di].vy*=drop[di].vtk;
+					drop[di].vx*=drop[di].vtk;
+				//}
+
+//				rgb = (drop[di].color).replace(/^(rgb|rgba)\(/,'').replace(/\)$/,'').replace(/\s/g,'').split(',');
+
+				if(drop[di].x<=1){drop[di].x=1;bounce(di,"x");}
+				if(drop[di].y<=1){drop[di].y=1;bounce(di,"y");}
+				//if(drop[di].y>=canh/3*2){drop[di].y=canh/3*2;bounce(di,"y");}
+				if(drop[di].y>=canh){drop[di].y=canh;bounce(di,"y");}
+				if(drop[di].x>=canw){drop[di].x=canw;bounce(di,"x");}
+				
+				
+				if((drop[di].fly)&&(drop[di].vy>0)){drop[di].fly=false;}
+				
+				dodrop(di);
+			}
+		}
+		
+		seecnx();
+		
+		// request new frame
+		
+		requestAnimFrame(function() {
+		  animate();
+		});
+		
+      }
+      
+      animate();
+      
+
+	function bounce(dn,strxy){
+		if(strxy=="y"){drop[dn].vy*=bouncey*-1;}
+		if(strxy=="x"){drop[dn].vx*=bouncex*-1;}
+	}
+	
+	function seecnx(){
+		for(sci=0;sci<=drop.length-1;sci++){
+			for(scn=sci+1;scn<=drop.length-1;scn++){
+				
+				if(drop[sci].act){
+			
+					if((drop[sci].cnx[scn]!=0)&&(drop[sci].cnx[scn])){
+						dostrain(sci,scn);
+					} else {
+						hipo = hipp(sci,scn);
+						masssum = drop[sci].rad+drop[scn].rad;	
+						if((getran(0,chancetoconect)<1)&&(hipo <= masssum)){
+							drop[sci].cnx[scn]=getran(masssum/2,masssum*2);
+						}
+						
+						if(!drop[sci].fly){ 
+							divi = Math.pow((drop[scn].rad+drop[sci].rad),2);
+							att = hipo/divi*atrackforce;
+							scimassprop=maxrad/drop[sci].rad;
+							scnmassprop=maxrad/drop[scn].rad;
+							
+							//context.beginPath();context.arc(drop[sci].x, drop[sci].y, Math.pow(masssum,fluidattract), 0, 2 * Math.PI, false);context.linewidth = 1;context.strokeStyle='#bbbbff';context.stroke();	
+							//context.beginPath();context.arc(drop[sci].x, drop[sci].y, Math.pow(masssum,fluidrepulse), 0, 2 * Math.PI, false);context.linewidth = 1;context.strokeStyle='#ffbbbb';context.stroke();	
+							
+							switch (true) {
+								case  ((hipo < Math.pow(masssum,fluidattract))&&(hipo > Math.pow(masssum,fluidrepulse))): //Attract
+									if(drop[sci].x<drop[scn].x){
+										drop[sci].vx+=att*scimassprop;
+										drop[scn].vx-=att*scnmassprop;
+									} else {
+										drop[sci].vx-=att*scimassprop;
+										drop[scn].vx+=att*scnmassprop;
+									}
+									if(drop[sci].y<drop[scn].y){
+										drop[sci].vy+=att*scimassprop;
+										drop[scn].vy-=att*scnmassprop;
+									} else {
+										drop[sci].vy-=att*scimassprop;
+										drop[scn].vy+=att*scnmassprop;
+									}
+									break;
+								case (hipo < Math.pow(masssum,fluidrepulse)): //Repulse
+									//scnmassprop/=2;
+									//scimassprop/=2;
+									if(drop[sci].x<drop[scn].x){
+										drop[sci].vx-=att*scimassprop;
+										drop[scn].vx+=att*scnmassprop;
+									} else {
+										drop[sci].vx+=att*scimassprop;
+										drop[scn].vx-=att*scnmassprop;
+									}
+									if(drop[sci].y<drop[scn].y){
+										drop[sci].vy-=att*scimassprop;
+										drop[scn].vy+=att*scnmassprop;
+									} else {
+										drop[sci].vy+=att*scimassprop;
+										drop[scn].vy-=att*scnmassprop;
+									}
+									break
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	function hipp(ho,hd){
+		a = Math.abs(drop[hd].x-drop[ho].x);
+		b = Math.abs(drop[hd].y-drop[ho].y);
+		hip = Math.abs(Math.sqrt(Math.pow(a,2)+Math.pow(b,2)));
+		return hip;
+	}
+	
+	function hypo(x1,y1,x2,y2){
+		a = Math.abs(x2-x1);
+		b = Math.abs(y2-y1);
+		hip = Math.abs(Math.sqrt(Math.pow(a,2)+Math.pow(b,2)));
+		return hip;
+	}
+	
+		
+	function drawst(ox,oy,dx,dy,size){
+
+		if((drawstrainmode=="straight")||(drawstrainmode=="line")){
+			context.beginPath();
+			context.moveTo(ox,oy);
+			context.lineTo(dx,dy);
+			context.lineWidth = strokewidth;
+			context.strokeStyle="rgba(255,255,255,0.2)";
+			context.stroke();
+		}
+	
+	}
+	
+	
+	function drawquad(ox,oy,dx,dy,ox2,oy2,dx2,dy2,size){
+		
+		context.fillStyle = 'rgba(255,255,255,0.2)';
+		context.beginPath();
+		context.moveTo(ox, oy);
+		context.lineTo(dx,dy);
+		
+		context.lineTo(dx2,dy2);
+		
+		context.lineTo(ox2, oy2);
+		context.closePath();
+		context.fill();
+		
+	
+	}
+
+	function vect(val,dir,ox,oy,dx,dy){
+		bhip=hypo(ox,oy,dx,dy);
+		
+		if(dir=="y"){
+			alt=Math.abs(oy-dy);
+			cval=val*alt/bhip;
+		}
+		if(dir=="x"){
+			larg=Math.abs(ox-dx);
+			cval=val*larg/bhip;
+		}
+		
+		return cval;
+		
+	}
+		
+	function killdrop(dn){
+		drop[dn].act=false;
+		
+		for(kd=0;kd<=maxdrop;kd++){
+			for(dc=kd;dc<=maxdrop;dc++){
+				if((drop[kd])&&(drop[kd].cnx[dc])){
+					if((kd==dn)||(dc==dn)){
+						drop[kd].cnx[dc]=-1;
+					}
+				}
+			}
+		}
+	}
+	
+	function dostrain(dsi,dsn){
+		
+			
+		if(drop[dsi].y>drop[dsn].y){ db=dsi; dt=dsn; } else { db=dsn; dt=dsi; }
+		
+		//drop[dsi].cnx[dsn]+=gravity*2;
+		
+		goo=drop[dsi].cnx[dsn];
+		maxten = goo*maxtension;
+		hipo = hipp(dsi,dsn);
+							if(hipo>maxten*strainsres){drop[dsi].cnx[dsn]=0;return;}  //break strains
+		bvx=0;
+		bvy=0;
+		tvx=0;
+		tvy=0;
+		force=strainlooseness/10; /////// in use?
+		radfact=0.005;
+		
+		if((!drop[db].fly)&&(!drop[dt].fly)){
+			if(hipo>maxten){
+				bvy=vect(strainlooseness/(2*drop[db].rad),"y",drop[db].x,drop[db].y,drop[dt].x,drop[dt].y)*-1;
+				bvx=vect(strainlooseness/(2*drop[db].rad),"x",drop[db].x,drop[db].y,drop[dt].x,drop[dt].y);
+				tvy=vect(strainlooseness/(2*drop[dt].rad),"y",drop[db].x,drop[db].y,drop[dt].x,drop[dt].y);
+				tvx=vect(strainlooseness/(2*drop[dt].rad),"x",drop[db].x,drop[db].y,drop[dt].x,drop[dt].y)*-1;
+			}
+			if(drop[db].x>drop[dt].x){bvx*=-1;tvx*=-1;};
+			drop[db].vx+=bvx/elasticatenuator;drop[db].vy+=bvy/elasticatenuator;drop[dt].vx+=tvx/elasticatenuator;drop[dt].vy+=tvy/elasticatenuator;
+
+			if(exchangemass){
+				massex = drop[dt].rad*radfact;												/// MASS (RAD) EXCHANGE
+				massex = vect(massex,"y",drop[db].x,drop[db].y,drop[dt].x,drop[dt].y);
+				mprop = (Math.PI*Math.pow(drop[dt].rad,2))-(Math.PI*Math.pow(drop[dt].rad-massex,2));
+				mprop*=massexchangeratio;massex*=massexchangeratio;
+				newrad = Math.sqrt(Math.pow(drop[db].rad,2)+(mprop/Math.PI));
+				if(newrad<=maxmass){drop[db].rad=newrad;drop[dt].rad-=massex;}
+				if(drop[dt].rad<=killrad){drop[dt].rad=0;killdrop(dt);}
+			}
+			
+		}
+		
+		
+		
+								//							wow=Math.abs((drop[dt].y-drop[db].y)/2)*0.6828;	/////////2Pi/10!!!!!!!!
+		goo=(maxten/2)/(Math.sqrt(hipo)+1);
+
+		larg=Math.abs(drop[dt].x-drop[db].x);
+		alt=drop[dt].y-drop[db].y;
+		cosfactRad=larg/hipo;		
+		sinfactRad=alt/hipo;
+		
+		goox=(drop[db].x+drop[dt].x)/2;
+		gooy=(drop[db].y+drop[dt].y)/2+(goo*1.618);
+		
+		larg=Math.abs(drop[db].x-goox);
+		alt=gooy-drop[db].y;
+		goohipo=hypo(drop[db].x,drop[db].y,goox,gooy);
+		cosfactRad=larg/goohipo;		
+		sinfactRad=alt/goohipo;
+		if(drop[dt].x>drop[db].x)cosfactRad*=-1;sinfactRad*=-1;		
+		
+		bpAx=0;		bpAy=0;		bpBx=0;		bpBy=0;				tpAx=0;		tpAy=0;		tpBx=0;		tbBy=0;
+		
+		bpAx=drop[db].x+(drop[db].rad*sinfactRad);
+		bpAy=drop[db].y-(drop[db].rad*cosfactRad);
+		bpBx=drop[db].x-(drop[db].rad*sinfactRad);
+		bpBy=drop[db].y+(drop[db].rad*cosfactRad);
+			
+		larg=Math.abs(drop[dt].x-goox);
+		alt=gooy-drop[dt].y;
+		goohipo=hypo(goox,gooy,drop[dt].x,drop[dt].y);
+		cosfactRad=larg/goohipo;		
+		sinfactRad=alt/goohipo;
+		if(drop[db].x>drop[dt].x)cosfactRad*=-1;sinfactRad*=-1;
+						
+				//larg=Math.abs(drop[dt].x-drop[db].x);
+				//alt=drop[dt].y-drop[db].y;
+				//cosfactRad=larg/hipo;		
+				//sinfactRad=alt/hipo;
+		
+		if ((drawstrainmode=="straight")||(drawstrainmode=="quad")) {
+			tpAx=drop[dt].x-(drop[dt].rad*sinfactRad);
+			tpAy=drop[dt].y+(drop[dt].rad*cosfactRad);
+			tpBx=drop[dt].x+(drop[dt].rad*sinfactRad);
+			tpBy=drop[dt].y-(drop[dt].rad*cosfactRad);
+		}
+		if ((drawstrainmode=="straight")) {
+			drawst(bpAx,bpAy,tpAx,tpAy,goo);
+			drawst(bpBx,bpBy,tpBx,tpBy,goo);
+		}
+		if (drawstrainmode=="quad") {
+			drawquad(bpAx,bpAy,tpAx,tpAy,bpBx,bpBy,tpBx,tpBy,goo);
+			
+		}
+		
+		
+		
+		if(drawstrainmode=="line"){ drawst(drop[db].x,drop[db].y,drop[dt].x,drop[dt].y,0); }
+		
+		
+		return;
+	}
+      
+	function dodrop(dn){
+		
+		if(drawball){
+			context.beginPath();
+			context.arc(drop[dn].x, drop[dn].y, drop[dn].rad, 0, 2 * Math.PI, false);
+			context.fillStyle = drop[dn].color;
+			context.fillStyle = "rgba(255,255,255,0.2)";
+			context.fill();
+		}
+		
+	}
+
+	dcount=-1;
+	initvx=0;initvy=0;
+	function createdrop(){
+			
+		dropnumber++;
+		if(dropnumber>maxdrop)dropnumber=0;
+		tn=dropnumber;ln=dropnumber-1;if(ln<0)ln=maxdrop;
+		if(dcount<0){dcount=0;}
+		if(dcount==0){
+			if(introdrop){randposinit();}
+			if((aclick>(jizz*1*0.99))||((getran(0,jizz)<1))){
+				aclick=0;
+				
+			}
+			aclick+=((jizz*1)-aclick)/10;
+			
+			drop[tn]=new Object();
+			drop[tn].act=true;drop[tn].fly=false;
+			drop[tn].rad=drop[dropnumber].rad=getran(minrad,maxrad);
+			drop[tn].vtk=getran(minvtk,maxvtk);
+			drop[tn].cnx=[-1];
+			drop[tn].x=mx;
+			drop[tn].y=my;//-aclick;
+			//drop[tn].vy=getran(jizz/3*2,jizz*1.5)*-1*(jizz/800);
+			//drop[tn].vy=getran(0,spread/5)-(spread/5/2);
+			//drop[tn].vx=getran(0,spread/5)-(spread/5/2);
+			drop[tn].vy=getran(spread*-1,spread);
+			drop[tn].vx=getran(spread*-1,spread);
+			initvx=drop[tn].vx;initvy=drop[tn].vy;
+			dcount++;
+		}else{
+			//out(tn);
+			if(Math.abs(my-drop[ln].y-aclick)>drop[ln].rad*maxtension){
+				dcount++;
+				drop[tn]=new Object();
+				drop[tn].act=true;drop[tn].fly=false;
+				drop[tn].rad=drop[ln].rad*0.999;
+				drop[tn].vtk=drop[ln].vtk*0.95;
+				drop[tn].x=mx;
+				drop[tn].y=my;//-aclick;
+				drop[tn].vx=initvx;
+				drop[tn].vy=initvy;//-(0.05*dcount);
+				//console.log(dcount);
+				var toacel=Math.abs(Math.sin(dcount));
+				if(initvx>=0){initvx+=toacel;}else{initvx-=toacel;}
+			    if(initvy>=0){initvy+=toacel;}else{initvy-=toacel;}
+			    
+				
+				drop[tn].cnx=[-1];
+				radsum=drop[ln].rad+drop[tn].rad;drop[ln].cnx[tn]=getran(radsum/2,radsum*2);
+				dcount++; 
+				if(dcount>aclick*strainsize){dcount=-1;}
+			}else{dropnumber--;}
+			
+			
+		}
+		
+		//out(dcount);
+		return;
+		//////////////////////
+
+		
+	}
+      
+      function getframems(){
+        var d=new Date();
+        thisframetime=d.getTime();
+        if(!lastframetime){lastframetime=thisframetime;}
+        framems=thisframetime-lastframetime;
+        lastframetime=thisframetime;
+    }
+
+
+	function getMousePos(canvas, evt) {
+		if(!introdrop){
+		    mx = evt.clientX - rect.left;
+		    my = evt.clientY - rect.top;
+		}
+		
+	}
+	
+	function mousedown(e){
+		e.preventDefault();
+		isclicked=true;
+		introdrop=false;
+	}
+	
+	function mouseup(){
+		isclicked=false;
+		aclick=0;
+	}
+	
+	function getran(min,max){
+		return ((Math.random()*(max-min))+min);
+	}
+	
+	function out(deb){
+		debug.value = deb;
+	}
+	
+	var introdrop=false;
+    function dropsome(){
+        introdrop=true;
+        randposinit();
+        isclicked=true;
+        clickintro=setTimeout(function(){if(introdrop){isclicked=false;}introdrop=false;},getran(1000,60000)); 
+        
+    }
+    
+    function randposinit(){
+        mx=getran(10,canw-10);
+        my=getran(10,canh-10);  
+    }
+
+</script>
+	
+
