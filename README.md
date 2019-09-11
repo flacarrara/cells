@@ -1,2 +1,2 @@
 # cells
-generative cell gravity behaviour at each refresh
+generative cell attraction/repulsion behaviour at each refresh
