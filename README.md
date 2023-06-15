@@ -1,11 +1,16 @@
 # cells
-generative cell attraction/repulsion behaviour at each refresh
 
-This is a generative art project written many years ago.
+Toying with particle systems and fluid simulation on Javascript canvas.
 
-Takes by reference atomic behaviors and viscosity fluid dynamics.
+At each refresh, a random set of physic rules.
 
 There are many configuration possibilities, randomized at each refresh
+
+Click around!
+
+This project was written many years ago, way before I even though of becoming a programmer.
+
+Takes by reference atomic behaviors and viscosity fluid dynamics.
 
 ---
 
