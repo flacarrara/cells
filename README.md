@@ -1,5 +1,7 @@
 # cells
 
+[Demo](https://fde-capu.github.io/cells/cells.html)
+
 Toying with particle systems and fluid simulation on Javascript canvas.
 
 At each refresh, a random set of physic rules.
